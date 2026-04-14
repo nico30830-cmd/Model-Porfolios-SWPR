@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Portfolio Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0d1117;
+      --surface:    #161b22;
+      --surface-hi: #1c2128;
+      --border:     #21262d;
+      --text:       #e6edf3;
+      --muted:      #8b949e;
+      --green:      #3fb950;
+      --green-bg:   rgba(63,185,80,.1);
+      --red:        #f85149;
+      --red-bg:     rgba(248,81,73,.1);
+      --blue:       #388bfd;
+      --mono:  'Roboto Mono', 'Courier New', monospace;
+      --sans:  'Inter', system-ui, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    .site-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 13px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+
+    .header-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .live-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+
+    .header-meta {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge {
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .badge-open   { background: var(--green-bg); color: var(--green); border: 1px solid rgba(63,185,80,.25); }
+    .badge-closed { background: rgba(139,148,158,.08); color: var(--muted); border: 1px solid rgba(139,148,158,.15); }
+
+    /* ── Countdown ─────────────────────────────────────────── */
+    .countdown-track { height: 2px; background: var(--border); }
+    .countdown-fill  { height: 100%; background: var(--blue); transition: width 1s linear; }
+
+    /* ── Grid ──────────────────────────────────────────────── */
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      padding: 20px 24px 40px;
+      max-width: 1800px;
+      margin: 0 auto;
+    }
+
+    /* ── Card ──────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-accent { height: 3px; }
+
+    .card-head {
+      padding: 16px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-hi);
+    }
+
+    .card-name {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    /* ── Metrics ───────────────────────────────────────────── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(65px, 1fr));
+      gap: 10px;
+    }
+
+    .metric { display: flex; flex-direction: column; gap: 4px; }
+
+    .m-label {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .m-val {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 500;
+      line-height: 1;
+    }
+
+    .pos  { color: var(--green); }
+    .neg  { color: var(--red); }
+    .flat { color: var(--muted); }
+
+    /* ── Holdings ──────────────────────────────────────────── */
+    .holdings { flex: 1; }
+
+    .bucket-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 20px 5px;
+      background: rgba(255,255,255,.015);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .bh-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .bh-pct {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: rgba(139,148,158,.45);
+    }
+
+    .holding {
+      display: flex;
+      align-items: center;
+      padding: 5px 20px;
+      border-bottom: 1px solid rgba(33,38,45,.6);
+      gap: 8px;
+      transition: background .1s;
+    }
+    .holding:last-child { border-bottom: none; }
+    .holding:hover      { background: rgba(56,139,253,.04); }
+
+    .h-tick {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--blue);
+      width: 50px;
+      flex-shrink: 0;
+    }
+
+    .h-wt {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .h-spacer { flex: 1; }
+
+    .h-ret {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      min-width: 64px;
+      text-align: right;
+      padding: 2px 7px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .h-ret.pos  { color: var(--green); background: var(--green-bg); }
+    .h-ret.neg  { color: var(--red);   background: var(--red-bg); }
+    .h-ret.flat { color: var(--muted); }
+
+    /* ── Loading / Error ──────────────────────────────────── */
+    .full-col { grid-column: 1 / -1; }
+
+    .loading-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 80px 20px;
+      color: var(--muted);
+    }
+
+    .spinner {
+      width: 36px; height: 36px;
+      border: 2px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-label { font-size: 13px; }
+
+    .error-box {
+      background: rgba(248,81,73,.05);
+      border: 1px solid rgba(248,81,73,.2);
+      border-radius: 8px;
+      padding: 20px 24px;
+      color: var(--red);
+    }
+    .error-box h3 { font-size: 14px; margin-bottom: 10px; }
+    .error-box p  { font-size: 12px; color: var(--muted); line-height: 1.8; }
+    .error-box code {
+      background: var(--surface-hi);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text);
+    }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 1100px) { .dashboard { grid-template-columns: 1fr; } }
+    @media (max-width: 1400px) { .m-val { font-size: 17px; } }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-title">
+    <div class="live-dot" id="live-dot"></div>
+    Model Portfolio Dashboard
+  </div>
+  <div class="header-right">
+    <div class="header-meta">
+      <span id="last-updated">Loading…</span>
+      <span style="color:var(--border)">|</span>
+      <span>Refresh <span id="countdown">15</span>s</span>
+    </div>
+    <div class="badge badge-closed" id="market-badge">Market Closed</div>
+  </div>
+</header>
+
+<div class="countdown-track">
+  <div class="countdown-fill" id="countdown-fill" style="width:100%"></div>
+</div>
+
+<div class="dashboard" id="loading-screen">
+  <div class="full-col loading-box">
+    <div class="spinner"></div>
+    <div class="loading-label">Fetching live data…</div>
+  </div>
+</div>
+
+<div class="dashboard" id="dashboard" style="display:none"></div>
+
+<script>
+const REFRESH_MS = 15_000;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PORTFOLIOS
+// ─────────────────────────────────────────────────────────────────────────────
+const PORTFOLIOS = [
+  {
+    id: 'conservative', name: 'Conservative', color: '#388bfd',
+    buckets: [
+      { label: 'Growth ETFs',   w: 0.04286,  tickers: ['SPGP','IWF','IWY','SCHG','SPYG','MGK','VONG'] },
+      { label: 'Fixed Income',  w: 0.075,    tickers: ['PFFD','ANGL','VWOB','FMHI','SRLN','ICVT'] },
+      { label: 'BDCs',          w: 0.025,    tickers: ['TSLX','MAIN','ARCC','HTGC','CSWC','OBDC','GBDC','BXSL','TRIN','MSDL'] },
+    ],
+  },
+  {
+    id: 'balanced', name: 'Balanced', color: '#a371f7',
+    buckets: [
+      { label: 'Growth ETFs',   w: 0.064286, tickers: ['SPGP','IEMG','IWY','SCHG','SPYG','VGK','VONG'] },
+      { label: 'Fixed Income',  w: 0.05,     tickers: ['PFFD','ANGL','VWOB','FMHI','SRLN','ICVT'] },
+      { label: 'BDCs',          w: 0.025,    tickers: ['TSLX','MAIN','ARCC','HTGC','CSWC','OBDC','GBDC','BXSL','TRIN','MSDL'] },
+    ],
+  },
+  {
+    id: 'aggressive', name: 'Aggressive', color: '#f0883e',
+    buckets: [
+      { label: 'Growth ETFs',        w: 0.0857, tickers: ['SPGP','IEMG','IWY','SCHG','SPYG','VGK','VONG'] },
+      { label: 'Fixed Income & BDCs', w: 0.025, tickers: ['PFFD','ANGL','VWOB','FMHI','SRLN','ICVT',
+                                                            'TSLX','MAIN','ARCC','HTGC','CSWC','OBDC',
+                                                            'GBDC','BXSL','TRIN','MSDL'] },
+    ],
+  },
+];
+
+const ALL_TICKERS = [...new Set(PORTFOLIOS.flatMap(p => p.buckets.flatMap(b => b.tickers)))];
+
+// Quarter definitions
+// base    = quarter-start close (previous quarter-end)
+// histEnd = quarter-end close date for completed quarters; null = use live price
+const QUARTER_DEFS = [
+  { label: "Q1 '26", base: '2025-12-31', histEnd: '2026-03-31', start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-03-31T23:59:59Z') },
+  { label: "Q2 '26", base: '2026-03-31', histEnd: null,         start: new Date('2026-04-01T00:00:00Z'), end: new Date('2026-06-30T23:59:59Z') },
+  { label: "Q3 '26", base: '2026-06-30', histEnd: null,         start: new Date('2026-07-01T00:00:00Z'), end: new Date('2026-09-30T23:59:59Z') },
+  { label: "Q4 '26", base: '2026-09-30', histEnd: null,         start: new Date('2026-10-01T00:00:00Z'), end: new Date('2026-12-31T23:59:59Z') },
+];
+
+const YTD_BASE = '2025-12-31'; // Dec 31 close is the base for all YTD calculations
+
+function getActiveQuarters() {
+  const now = new Date();
+  return QUARTER_DEFS
+    .filter(q => now >= q.start)
+    .map(q => ({ ...q, isCurrent: now >= q.start && now <= q.end }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+const state = {
+  live:        {},   // ticker → { price, open }
+  historical:  {},   // ticker → { 'YYYY-MM-DD': number }
+  lastUpdated: null,
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────────────────────────────────────────
+const fmtRet = r =>
+  r == null || isNaN(r) ? '—' : (r >= 0 ? '+' : '') + (r * 100).toFixed(2) + '%';
+
+const cls = r =>
+  r == null || isNaN(r) ? 'flat' : r > 0 ? 'pos' : r < 0 ? 'neg' : 'flat';
+
+function isMarketOpen() {
+  const d = new Date();
+  if (d.getUTCDay() === 0 || d.getUTCDay() === 6) return false;
+  const mo = d.getUTCMonth() + 1, da = d.getUTCDate();
+  const dst = (mo > 3 && mo < 11) || (mo === 3 && da >= 8) || (mo === 11 && da <= 7);
+  const et  = d.getUTCHours() + d.getUTCMinutes() / 60 + (dst ? -4 : -5);
+  return et >= 9.5 && et < 16;
+}
+
+const tsToDateStr = ts => new Date(ts * 1000).toISOString().slice(0, 10);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// YAHOO FINANCE API
+// ─────────────────────────────────────────────────────────────────────────────
+async function yahooChart(ticker, params) {
+  const qs  = Object.entries(params).map(([k, v]) => `${k}=${v}`).join('&');
+  const url = `/api/chart/${ticker}?${qs}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status} (${ticker})`);
+  const json = await res.json();
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new Error(`No chart data (${ticker})`);
+  return result;
+}
+
+function extractClose(result, targetDate) {
+  const ts     = result.timestamp || [];
+  const closes = result.indicators?.quote?.[0]?.close || [];
+
+  // Exact date match (ts is in seconds; Yahoo timestamps land during the trading day)
+  for (let i = 0; i < ts.length; i++) {
+    if (tsToDateStr(ts[i]) === targetDate && closes[i] != null) return closes[i];
+  }
+  // Fallback: last non-null close at or before end of target date (handles holidays)
+  const cutoff = new Date(targetDate + 'T23:59:59Z').getTime() / 1000;
+  let last = null;
+  for (let i = 0; i < ts.length; i++) {
+    if (ts[i] <= cutoff && closes[i] != null) last = closes[i];
+  }
+  return last;
+}
+
+// Initial fetch: pulls history from before earliest base date to present
+async function initTicker(ticker, baseDates) {
+  const sorted = [...baseDates].sort();
+  const p1 = Math.floor(new Date(sorted[0] + 'T00:00:00Z').getTime() / 1000) - 5 * 86400;
+  const p2 = Math.floor(Date.now() / 1000) + 86400;
+
+  const result = await yahooChart(ticker, {
+    interval: '1d', period1: p1, period2: p2, includePrePost: false,
+  });
+
+  const historical = {};
+  for (const d of baseDates) historical[d] = extractClose(result, d);
+
+  const meta    = result.meta;
+  const q       = result.indicators?.quote?.[0];
+  const lastIdx = Math.max(0, (result.timestamp?.length ?? 1) - 1);
+
+  return {
+    historical,
+    price:         meta?.regularMarketPrice         ?? q?.close?.[lastIdx]               ?? null,
+    previousClose: meta?.regularMarketPreviousClose ?? q?.close?.[Math.max(0,lastIdx-1)] ?? null,
+  };
+}
+
+// Live refresh fetch: today's bar only
+async function liveTicker(ticker) {
+  const result = await yahooChart(ticker, {
+    range: '1d', interval: '1d', includePrePost: false,
+  });
+  const meta    = result.meta;
+  const q       = result.indicators?.quote?.[0];
+  const lastIdx = Math.max(0, (result.timestamp?.length ?? 1) - 1);
+  return {
+    price:         meta?.regularMarketPrice         ?? q?.close?.[lastIdx]               ?? null,
+    previousClose: meta?.regularMarketPreviousClose ?? q?.close?.[Math.max(0,lastIdx-1)] ?? null,
+  };
+}
+
+async function fetchAll(liveOnly = false) {
+  const quarters  = getActiveQuarters();
+  const baseDates = [...new Set([
+    YTD_BASE,
+    ...quarters.map(q => q.base),
+    ...quarters.filter(q => q.histEnd).map(q => q.histEnd),
+  ])];
+
+  const results = await Promise.allSettled(
+    ALL_TICKERS.map(t => liveOnly ? liveTicker(t) : initTicker(t, baseDates))
+  );
+
+  results.forEach((r, i) => {
+    const t = ALL_TICKERS[i];
+    if (r.status === 'fulfilled') {
+      if (!liveOnly) {
+        state.historical[t] = r.value.historical;
+        state.live[t]       = { price: r.value.price, previousClose: r.value.previousClose };
+      } else {
+        state.live[t] = r.value;
+      }
+    } else {
+      console.warn(`[${t}] ${r.reason?.message}`);
+      if (!liveOnly) state.historical[t] = {};
+    }
+  });
+
+  state.lastUpdated = new Date();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALCULATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Returns the most recent official close:
+//   market open  → previous day's close (today hasn't closed yet)
+//   market closed → today's close (= current regularMarketPrice)
+function closedPrice(ticker) {
+  const q = state.live[ticker];
+  if (!q) return null;
+  return isMarketOpen() ? (q.previousClose ?? null) : (q.price ?? null);
+}
+
+// Today's return: previous close → current live price (updates throughout day)
+function dailyRet(ticker) {
+  const q = state.live[ticker];
+  if (!q?.price || !q?.previousClose || q.previousClose === 0) return null;
+  return (q.price - q.previousClose) / q.previousClose;
+}
+
+// Quarter return:
+//   completed quarter (histEnd set) → historical start close vs historical end close
+//   current quarter  (histEnd null) → historical start close vs latest close
+function qRet(ticker, quarter) {
+  const base = state.historical[ticker]?.[quarter.base];
+  if (!base || base === 0) return null;
+  const end = quarter.histEnd
+    ? state.historical[ticker]?.[quarter.histEnd]
+    : closedPrice(ticker);
+  if (!end) return null;
+  return (end - base) / base;
+}
+
+// YTD: Dec 31 close → latest official close
+function ytdRet(ticker) {
+  const base = state.historical[ticker]?.[YTD_BASE];
+  const end  = closedPrice(ticker);
+  if (!base || base === 0 || !end) return null;
+  return (end - base) / base;
+}
+
+// Weighted sum across all holdings; weights sum to ~1.0 per portfolio
+function weightedRet(portfolio, fn) {
+  let sum = 0, covered = 0;
+  for (const b of portfolio.buckets) {
+    for (const t of b.tickers) {
+      const r = fn(t);
+      if (r != null && !isNaN(r)) { sum += b.w * r; covered += b.w; }
+    }
+  }
+  return covered > 0 ? sum : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────────────────
+function renderCard(p) {
+  const qs = getActiveQuarters();
+
+  const todayR = weightedRet(p, dailyRet);
+
+  const ytdR = weightedRet(p, ytdRet);
+
+  const metricsHTML = [
+    `<div class="metric">
+       <div class="m-label">Today</div>
+       <div class="m-val ${cls(todayR)}">${fmtRet(todayR)}</div>
+     </div>`,
+    ...qs.map(q => {
+      const r = weightedRet(p, t => qRet(t, q));
+      return `<div class="metric">
+        <div class="m-label">${q.label}</div>
+        <div class="m-val ${cls(r)}">${fmtRet(r)}</div>
+      </div>`;
+    }),
+    `<div class="metric">
+       <div class="m-label">YTD</div>
+       <div class="m-val ${cls(ytdR)}">${fmtRet(ytdR)}</div>
+     </div>`,
+  ].join('');
+
+  const bucketsHTML = p.buckets.map(b => {
+    const totalPct = (b.w * b.tickers.length * 100).toFixed(1) + '%';
+    const rows = b.tickers.map(t => {
+      const r = dailyRet(t);
+      return `<div class="holding">
+        <span class="h-tick">${t}</span>
+        <span class="h-wt">${(b.w * 100).toFixed(2)}%</span>
+        <span class="h-spacer"></span>
+        <span class="h-ret ${cls(r)}">${fmtRet(r)}</span>
+      </div>`;
+    }).join('');
+    return `<div class="bucket-head">
+        <span class="bh-label">${b.label}</span>
+        <span class="bh-pct">${totalPct}</span>
+      </div>${rows}`;
+  }).join('');
+
+  return `<div class="card">
+    <div class="card-accent" style="background:${p.color}"></div>
+    <div class="card-head">
+      <div class="card-name">${p.name}</div>
+      <div class="metrics">${metricsHTML}</div>
+    </div>
+    <div class="holdings">${bucketsHTML}</div>
+  </div>`;
+}
+
+function render() {
+  document.getElementById('dashboard').innerHTML = PORTFOLIOS.map(renderCard).join('');
+
+  const open  = isMarketOpen();
+  const badge = document.getElementById('market-badge');
+  badge.textContent = open ? 'Market Open' : 'Market Closed';
+  badge.className   = `badge ${open ? 'badge-open' : 'badge-closed'}`;
+
+  if (state.lastUpdated) {
+    document.getElementById('last-updated').textContent =
+      `Updated ${state.lastUpdated.toLocaleTimeString('en-US', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      })}`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUNTDOWN
+// ─────────────────────────────────────────────────────────────────────────────
+let nextRefreshAt = 0;
+
+setInterval(() => {
+  const rem = Math.max(0, nextRefreshAt - Date.now());
+  document.getElementById('countdown-fill').style.width = (rem / REFRESH_MS * 100) + '%';
+  document.getElementById('countdown').textContent = Math.ceil(rem / 1000);
+}, 500);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN
+// ─────────────────────────────────────────────────────────────────────────────
+async function liveRefresh() {
+  nextRefreshAt = Date.now() + REFRESH_MS;
+  await fetchAll(true);
+  render();
+}
+
+async function init() {
+  try {
+    await fetchAll(false);
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'grid';
+    render();
+    nextRefreshAt = Date.now() + REFRESH_MS;
+    setInterval(liveRefresh, REFRESH_MS);
+  } catch (err) {
+    document.getElementById('loading-screen').innerHTML = `
+      <div class="full-col">
+        <div class="error-box">
+          <h3>Failed to load portfolio data</h3>
+          <p>
+            Make sure the proxy server is running:<br><br>
+            <code>python server.py</code><br><br>
+            Then open <code>http://localhost:5000/</code> — do <em>not</em> open
+            <code>index.html</code> directly as a file.<br><br>
+            <strong>Error:</strong> <code>${err.message}</code>
+          </p>
+        </div>
+      </div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
