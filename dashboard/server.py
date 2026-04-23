@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Local proxy server for the Model Portfolio Dashboard.
+"""Local proxy server using yfinance with caching for speed."""
 
-Requirements:
-    pip install yfinance
-
-Usage:
-    python server.py
-
-Then open http://localhost:5000/ in your browser.
-"""
-
+import gzip
 import http.server
+import http.cookiejar
 import json
 import os
+import re
 import socketserver
 import sys
+import threading
+import time
+import urllib.error
 import urllib.parse
-from datetime import datetime, timezone
+import urllib.request
+from datetime import datetime, timezone, timedelta
 
 try:
     import yfinance as yf
@@ -29,17 +27,31 @@ except ImportError:
 
 PORT = int(os.environ.get('PORT', 5000))
 
+# All tickers from the portfolios
+ALL_TICKERS = [
+    'SPGP', 'IWF', 'IWY', 'SCHG', 'SPYG', 'MGK', 'VONG',
+    'PFFD', 'ANGL', 'VWOB', 'FMHI', 'SRLN', 'ICVT',
+    'TSLX', 'MAIN', 'ARCC', 'HTGC', 'CSWC', 'OBDC', 'GBDC', 'BXSL', 'TRIN', 'MSDL',
+    'IEMG', 'VGK',
+]
 
-def fetch_chart(ticker, params):
+# ── Cache ─────────────────────────────────────────────────────────────────────
+_cache = {}
+_cache_lock = threading.Lock()
+
+
+def _fetch_chart(ticker, params):
     """Fetch ticker data via yfinance and return in Yahoo Finance chart format."""
     t = yf.Ticker(ticker)
 
     if 'period1' in params and 'period2' in params:
-        start = datetime.fromtimestamp(int(params['period1']), tz=timezone.utc)
-        end   = datetime.fromtimestamp(int(params['period2']), tz=timezone.utc)
-        hist  = t.history(start=start, end=end, interval='1d', auto_adjust=False)
+        # Pass dates as plain strings — avoids tz-aware datetime issues in yfinance 1.x
+        start = datetime.fromtimestamp(int(params['period1']), tz=timezone.utc).strftime('%Y-%m-%d')
+        end   = datetime.fromtimestamp(int(params['period2']), tz=timezone.utc).strftime('%Y-%m-%d')
+        hist  = t.history(start=start, end=end, interval='1d')
     else:
-        hist = t.history(period='1d', interval='1d', auto_adjust=False)
+        # Fetch 2 days so we always have a previous-close bar available
+        hist = t.history(period='2d', interval='1d')
 
     # Current price, open, and previous close from fast_info
     price          = None
@@ -69,7 +81,7 @@ def fetch_chart(ticker, params):
         price = closes[-1]
     if open_price is None and opens:
         open_price = opens[-1]
-    if previous_close is None and closes and len(closes) >= 2:
+    if previous_close is None and len(closes) >= 2:
         previous_close = closes[-2]
 
     return {
@@ -90,6 +102,40 @@ def fetch_chart(ticker, params):
     }
 
 
+def _refresh_cache():
+    """Fetch all tickers and update cache."""
+    global _cache
+    print('[cache] Refreshing all tickers with historical data...')
+
+    # Calculate the date range the frontend uses (Dec 26, 2025 to today + 1 day)
+    start_dt = datetime.strptime('2025-12-26', '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    end_dt   = datetime.now(tz=timezone.utc) + timedelta(days=1)
+
+    for ticker in ALL_TICKERS:
+        try:
+            print(f'  {ticker}...', end=' ', flush=True)
+            # Fetch full historical range for initial load
+            params = {
+                'period1': str(int(start_dt.timestamp())),
+                'period2': str(int(end_dt.timestamp())),
+            }
+            data = _fetch_chart(ticker, params)
+            with _cache_lock:
+                _cache[ticker] = data
+            price = data['chart']['result'][0]['meta']['regularMarketPrice']
+            print(f'${price:.2f}' if price else 'OK')
+        except Exception as e:
+            print(f'ERROR: {e}', flush=True)
+    print('[cache] Refresh complete.\n', flush=True)
+
+
+def _cache_loop():
+    """Background thread: refresh cache every 15 seconds."""
+    while True:
+        time.sleep(15)
+        _refresh_cache()
+
+
 class _Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
@@ -102,13 +148,19 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def _proxy(self, ticker, params):
+        # Return cached data (works for both historical and live requests)
+        with _cache_lock:
+            if ticker in _cache:
+                self._reply(200, json.dumps(_cache[ticker]).encode())
+                return
+
+        # Fallback: fetch live if not cached
         print(f'  {ticker}', end=' ... ', flush=True)
         try:
-            data = fetch_chart(ticker, params)
-            body = json.dumps(data).encode()
+            data = _fetch_chart(ticker, params)
             price = data['chart']['result'][0]['meta']['regularMarketPrice']
             print(f'${price:.2f}' if price else 'OK')
-            self._reply(200, body)
+            self._reply(200, json.dumps(data).encode())
         except Exception as e:
             print(f'ERROR: {e}')
             self._reply(500, json.dumps({'error': str(e)}).encode())
@@ -124,6 +176,12 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         pass   # suppress default request log
 
 
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    """Handle concurrent requests in threads."""
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -131,15 +189,15 @@ if __name__ == '__main__':
     print(' Model Portfolio Dashboard')
     print('=' * 50)
     print()
-    print('Testing connection (fetching SPY)...')
-    try:
-        fi = yf.Ticker('SPY').fast_info
-        print(f'OK — SPY last price: ${fi.last_price:.2f}\n')
-    except Exception as e:
-        print(f'WARNING: {e}\n')
 
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(('', PORT), _Handler) as httpd:
+    print('Pre-fetching all tickers (first time, takes ~30s)...')
+    _refresh_cache()
+
+    # Start background refresh thread
+    cache_thread = threading.Thread(target=_cache_loop, daemon=True)
+    cache_thread.start()
+
+    with ThreadedHTTPServer(('', PORT), _Handler) as httpd:
         print(f'Open http://localhost:{PORT}/ in your browser')
         print('Press Ctrl+C to stop.\n')
         try:

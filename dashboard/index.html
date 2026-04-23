@@ -95,10 +95,6 @@
     .badge-open   { background: var(--green-bg); color: var(--green); border: 1px solid rgba(63,185,80,.25); }
     .badge-closed { background: rgba(139,148,158,.08); color: var(--muted); border: 1px solid rgba(139,148,158,.15); }
 
-    /* ── Countdown ─────────────────────────────────────────── */
-    .countdown-track { height: 2px; background: var(--border); }
-    .countdown-fill  { height: 100%; background: var(--blue); transition: width 1s linear; }
-
     /* ── Grid ──────────────────────────────────────────────── */
     .dashboard {
       display: grid;
@@ -185,10 +181,11 @@
       color: var(--muted);
     }
 
-    .bh-pct {
+    .bh-wt {
       font-family: var(--mono);
-      font-size: 9px;
-      color: rgba(139,148,158,.45);
+      font-size: 10px;
+      color: var(--muted);
+      flex-shrink: 0;
     }
 
     .holding {
@@ -292,15 +289,11 @@
     <div class="header-meta">
       <span id="last-updated">Loading…</span>
       <span style="color:var(--border)">|</span>
-      <span>Refresh <span id="countdown">15</span>s</span>
+      <span><span id="countdown">15</span>s</span>
     </div>
     <div class="badge badge-closed" id="market-badge">Market Closed</div>
   </div>
 </header>
-
-<div class="countdown-track">
-  <div class="countdown-fill" id="countdown-fill" style="width:100%"></div>
-</div>
 
 <div class="dashboard" id="loading-screen">
   <div class="full-col loading-box">
@@ -337,10 +330,9 @@ const PORTFOLIOS = [
   {
     id: 'aggressive', name: 'Aggressive', color: '#f0883e',
     buckets: [
-      { label: 'Growth ETFs',        w: 0.0857, tickers: ['SPGP','IEMG','IWY','SCHG','SPYG','VGK','VONG'] },
-      { label: 'Fixed Income & BDCs', w: 0.025, tickers: ['PFFD','ANGL','VWOB','FMHI','SRLN','ICVT',
-                                                            'TSLX','MAIN','ARCC','HTGC','CSWC','OBDC',
-                                                            'GBDC','BXSL','TRIN','MSDL'] },
+      { label: 'Growth ETFs',   w: 0.0857, tickers: ['SPGP','IEMG','IWY','SCHG','SPYG','VGK','VONG'] },
+      { label: 'Fixed Income',  w: 0.025, tickers: ['PFFD','ANGL','VWOB','FMHI','SRLN','ICVT'] },
+      { label: 'BDCs',          w: 0.025, tickers: ['TSLX','MAIN','ARCC','HTGC','CSWC','OBDC','GBDC','BXSL','TRIN','MSDL'] },
     ],
   },
 ];
@@ -372,6 +364,7 @@ function getActiveQuarters() {
 const state = {
   live:        {},   // ticker → { price, open }
   historical:  {},   // ticker → { 'YYYY-MM-DD': number }
+  dividends:   {},   // ticker → [{ date, amount }]
   lastUpdated: null,
 };
 
@@ -394,6 +387,25 @@ function isMarketOpen() {
 }
 
 const tsToDateStr = ts => new Date(ts * 1000).toISOString().slice(0, 10);
+
+function dayAfter(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function extractDividends(result) {
+  const ts      = result.timestamp || [];
+  const amounts = result.indicators?.dividends?.[0]?.amount || [];
+  const dividends = [];
+  for (let i = 0; i < ts.length; i++) {
+    const amount = amounts[i];
+    if (amount != null && amount !== 0) {
+      dividends.push({ date: tsToDateStr(ts[i]), amount });
+    }
+  }
+  return dividends;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // YAHOO FINANCE API
@@ -445,6 +457,7 @@ async function initTicker(ticker, baseDates) {
 
   return {
     historical,
+    dividends:     extractDividends(result),
     price:         meta?.regularMarketPrice         ?? q?.close?.[lastIdx]               ?? null,
     previousClose: meta?.regularMarketPreviousClose ?? q?.close?.[Math.max(0,lastIdx-1)] ?? null,
   };
@@ -459,6 +472,7 @@ async function liveTicker(ticker) {
   const q       = result.indicators?.quote?.[0];
   const lastIdx = Math.max(0, (result.timestamp?.length ?? 1) - 1);
   return {
+    dividends:     extractDividends(result),
     price:         meta?.regularMarketPrice         ?? q?.close?.[lastIdx]               ?? null,
     previousClose: meta?.regularMarketPreviousClose ?? q?.close?.[Math.max(0,lastIdx-1)] ?? null,
   };
@@ -481,9 +495,11 @@ async function fetchAll(liveOnly = false) {
     if (r.status === 'fulfilled') {
       if (!liveOnly) {
         state.historical[t] = r.value.historical;
+        state.dividends[t]  = r.value.dividends;
         state.live[t]       = { price: r.value.price, previousClose: r.value.previousClose };
       } else {
-        state.live[t] = r.value;
+        if (!state.dividends[t]) state.dividends[t] = r.value.dividends;
+        state.live[t]       = { price: r.value.price, previousClose: r.value.previousClose };
       }
     } else {
       console.warn(`[${t}] ${r.reason?.message}`);
@@ -508,10 +524,20 @@ function closedPrice(ticker) {
 }
 
 // Today's return: previous close → current live price (updates throughout day)
+function sumDividends(ticker, fromDate, toDate) {
+  const divs = state.dividends[ticker];
+  if (!divs) return 0;
+  return divs.reduce((sum, d) => (
+    d.date >= fromDate && d.date <= toDate ? sum + d.amount : sum
+  ), 0);
+}
+
 function dailyRet(ticker) {
   const q = state.live[ticker];
   if (!q?.price || !q?.previousClose || q.previousClose === 0) return null;
-  return (q.price - q.previousClose) / q.previousClose;
+  const today = new Date().toISOString().slice(0, 10);
+  const div = sumDividends(ticker, today, today);
+  return (q.price + div - q.previousClose) / q.previousClose;
 }
 
 // Quarter return:
@@ -524,7 +550,9 @@ function qRet(ticker, quarter) {
     ? state.historical[ticker]?.[quarter.histEnd]
     : closedPrice(ticker);
   if (!end) return null;
-  return (end - base) / base;
+  const endDate = quarter.histEnd || new Date().toISOString().slice(0, 10);
+  const div = sumDividends(ticker, dayAfter(quarter.base), endDate);
+  return (end + div - base) / base;
 }
 
 // YTD: Dec 31 close → latest official close
@@ -532,7 +560,9 @@ function ytdRet(ticker) {
   const base = state.historical[ticker]?.[YTD_BASE];
   const end  = closedPrice(ticker);
   if (!base || base === 0 || !end) return null;
-  return (end - base) / base;
+  const endDate = new Date().toISOString().slice(0, 10);
+  const div = sumDividends(ticker, dayAfter(YTD_BASE), endDate);
+  return (end + div - base) / base;
 }
 
 // Weighted sum across all holdings; weights sum to ~1.0 per portfolio
@@ -543,6 +573,15 @@ function weightedRet(portfolio, fn) {
       const r = fn(t);
       if (r != null && !isNaN(r)) { sum += b.w * r; covered += b.w; }
     }
+  }
+  return covered > 0 ? sum : null;
+}
+
+function weightedRetBucket(bucket, fn) {
+  let sum = 0, covered = 0;
+  for (const t of bucket.tickers) {
+    const r = fn(t);
+    if (r != null && !isNaN(r)) { sum += bucket.w * r; covered += bucket.w; }
   }
   return covered > 0 ? sum : null;
 }
@@ -576,7 +615,7 @@ function renderCard(p) {
   ].join('');
 
   const bucketsHTML = p.buckets.map(b => {
-    const totalPct = (b.w * b.tickers.length * 100).toFixed(1) + '%';
+    const bucketRet = weightedRetBucket(b, dailyRet);
     const rows = b.tickers.map(t => {
       const r = dailyRet(t);
       return `<div class="holding">
@@ -588,7 +627,9 @@ function renderCard(p) {
     }).join('');
     return `<div class="bucket-head">
         <span class="bh-label">${b.label}</span>
-        <span class="bh-pct">${totalPct}</span>
+        <span class="bh-wt">${(b.w * 100).toFixed(2)}%</span>
+        <span class="h-spacer"></span>
+        <span class="h-ret ${cls(bucketRet)}">${fmtRet(bucketRet)}</span>
       </div>${rows}`;
   }).join('');
 
@@ -625,7 +666,6 @@ let nextRefreshAt = 0;
 
 setInterval(() => {
   const rem = Math.max(0, nextRefreshAt - Date.now());
-  document.getElementById('countdown-fill').style.width = (rem / REFRESH_MS * 100) + '%';
   document.getElementById('countdown').textContent = Math.ceil(rem / 1000);
 }, 500);
 
