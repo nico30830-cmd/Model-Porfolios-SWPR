@@ -53,15 +53,10 @@ def _fetch_chart(ticker, params):
         # Fetch 2 days so we always have a previous-close bar available
         hist = t.history(period='2d', interval='1d')
 
-    # Current price, open, and previous close from fast_info
-    price          = None
-    open_price     = None
-    previous_close = None
+    # Current price from fast_info (most real-time source)
+    price = None
     try:
-        fi             = t.fast_info
-        price          = float(fi.last_price)
-        open_price     = float(fi.open)
-        previous_close = float(fi.previous_close)
+        price = float(yf.Ticker(ticker).fast_info.last_price)
     except Exception:
         pass
 
@@ -76,13 +71,17 @@ def _fetch_chart(ticker, params):
         closes.append(float(c) if c == c else None)   # NaN → None
         opens.append(float(o)  if o == o else None)
 
-    # Fall back to last/second-to-last bar if fast_info didn't give us values
+    # Current price fallback: last close bar
     if price is None and closes:
         price = closes[-1]
-    if open_price is None and opens:
-        open_price = opens[-1]
-    if previous_close is None and len(closes) >= 2:
-        previous_close = closes[-2]
+
+    # Previous close: always use the second-to-last historical bar — this is
+    # unambiguously the previous trading day's official close regardless of
+    # what fast_info.previous_close returns (which can be unreliable).
+    previous_close = closes[-2] if len(closes) >= 2 else None
+
+    # Today's open: from the last bar in history
+    open_price = opens[-1] if opens else None
 
     return {
         'chart': {
