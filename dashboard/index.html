@@ -627,7 +627,7 @@ function renderCard(p) {
     }).join('');
     return `<div class="bucket-head">
         <span class="bh-label">${b.label}</span>
-        <span class="bh-wt">${(b.w * 100).toFixed(2)}%</span>
+        <span class="bh-wt">${(b.w * b.tickers.length * 100).toFixed(2)}%</span>
         <span class="h-spacer"></span>
         <span class="h-ret ${cls(bucketRet)}">${fmtRet(bucketRet)}</span>
       </div>${rows}`;
