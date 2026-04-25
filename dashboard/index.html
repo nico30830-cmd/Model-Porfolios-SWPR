@@ -276,6 +276,20 @@
     /* ── Responsive ────────────────────────────────────────── */
     @media (max-width: 1100px) { .dashboard { grid-template-columns: 1fr; } }
     @media (max-width: 1400px) { .m-val { font-size: 17px; } }
+
+    /* ── Performance Table ─────────────────────────────────────────── */
+    .card-head .card-name { margin-bottom: 6px; }
+    .perf-table { display: flex; flex-direction: column; gap: 0; padding-top: 4px; }
+    .pt-row { display: grid; gap: 6px; align-items: baseline; padding: 3px 0; }
+    .pt-head { padding-bottom: 5px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+    .pt-label { font-size: 8px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+    .pt-col { font-size: 8px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); text-align: right; white-space: nowrap; }
+    .pt-val { font-family: var(--mono); font-size: 15px; font-weight: 500; text-align: right; line-height: 1; }
+    .pt-spread { border-top: 1px solid var(--border); padding-top: 5px; margin-top: 3px; }
+    .pt-spread .pt-val { font-size: 12px; }
+    .bh-today { font-size: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
+    .pt-bm-split { font-size: 7px; text-transform: none; letter-spacing: 0.3px; font-weight: 500; opacity: 0.65; white-space: nowrap; }
+    .pt-bm-row { border-bottom: 1px solid var(--border); padding-bottom: 6px; }
   </style>
 </head>
 <body>
@@ -314,9 +328,9 @@ const PORTFOLIOS = [
   {
     id: 'conservative', name: 'Conservative', color: '#388bfd',
     buckets: [
-      { label: 'Growth ETFs',   w: 0.04286,  tickers: ['SPGP','IWF','IWY','SCHG','SPYG','MGK','VONG'] },
-      { label: 'Fixed Income',  w: 0.075,    tickers: ['PFFD','ANGL','VWOB','FMHI','SRLN','ICVT'] },
-      { label: 'BDCs',          w: 0.025,    tickers: ['TSLX','MAIN','ARCC','HTGC','CSWC','OBDC','GBDC','BXSL','TRIN','MSDL'] },
+      { label: 'Equities',      w: 0.0357,  tickers: ['BSTZ','BCAT','DVY','IEMG','SCHD','VGK','NOBL'] },
+      { label: 'Fixed Income',  w: 0.0667,  tickers: ['PFFD','ANGL','VWOB','PDO','SRLN','PDI'] },
+      { label: 'BDCs',          w: 0.035,   tickers: ['TSLX','MAIN','ARCC','HTGC','CSWC','OBDC','GBDC','BXSL','TRIN','MSDL'] },
     ],
   },
   {
@@ -337,7 +351,7 @@ const PORTFOLIOS = [
   },
 ];
 
-const ALL_TICKERS = [...new Set(PORTFOLIOS.flatMap(p => p.buckets.flatMap(b => b.tickers)))];
+const ALL_TICKERS = [...new Set([...PORTFOLIOS.flatMap(p => p.buckets.flatMap(b => b.tickers)), 'SPY', 'AGG'])];
 
 // Quarter definitions
 // base    = quarter-start close (previous quarter-end)
@@ -350,6 +364,12 @@ const QUARTER_DEFS = [
 ];
 
 const YTD_BASE = '2025-12-31'; // Dec 31 close is the base for all YTD calculations
+
+const BENCHMARKS = {
+  aggressive:   { SPY: 0.80, AGG: 0.20 },
+  balanced:     { SPY: 0.60, AGG: 0.40 },
+  conservative: { SPY: 0.40, AGG: 0.60 },
+};
 
 function getActiveQuarters() {
   const now = new Date();
@@ -586,36 +606,70 @@ function weightedRetBucket(bucket, fn) {
   return covered > 0 ? sum : null;
 }
 
+function bucketOwnRet(bucket, fn) {
+  let sum = 0, count = 0;
+  for (const t of bucket.tickers) {
+    const r = fn(t);
+    if (r != null && !isNaN(r)) { sum += r; count++; }
+  }
+  return count > 0 ? sum / count : null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // RENDER
 // ─────────────────────────────────────────────────────────────────────────────
 function renderCard(p) {
   const qs = getActiveQuarters();
 
-  const todayR = weightedRet(p, dailyRet);
+  // Columns: completed/active quarters first, then YTD, then Today
+  const periods = [
+    ...qs.map(q => ({ label: q.label, fn: t => qRet(t, q) })),
+    { label: 'YTD',   fn: ytdRet   },
+    { label: 'Today', fn: dailyRet },
+  ];
 
-  const ytdR = weightedRet(p, ytdRet);
+  const bm = BENCHMARKS[p.id];
 
-  const metricsHTML = [
-    `<div class="metric">
-       <div class="m-label">Today</div>
-       <div class="m-val ${cls(todayR)}">${fmtRet(todayR)}</div>
-     </div>`,
-    ...qs.map(q => {
-      const r = weightedRet(p, t => qRet(t, q));
-      return `<div class="metric">
-        <div class="m-label">${q.label}</div>
-        <div class="m-val ${cls(r)}">${fmtRet(r)}</div>
-      </div>`;
-    }),
-    `<div class="metric">
-       <div class="m-label">YTD</div>
-       <div class="m-val ${cls(ytdR)}">${fmtRet(ytdR)}</div>
-     </div>`,
-  ].join('');
+  // Benchmark return: strict — null if either SPY or AGG is missing
+  const bmRet = fn => {
+    if (!bm) return null;
+    let sum = 0;
+    for (const [t, w] of Object.entries(bm)) {
+      const r = fn(t);
+      if (r == null || isNaN(r)) return null;
+      sum += w * r;
+    }
+    return sum;
+  };
+
+  const portVals  = periods.map(pd => weightedRet(p, pd.fn));
+  const benchVals = periods.map(pd => bmRet(pd.fn));
+  const spreadVals = periods.map((_, i) => {
+    const pv = portVals[i], bv = benchVals[i];
+    return (pv != null && bv != null) ? pv - bv : null;
+  });
+
+  const gridCols = `minmax(70px,auto) repeat(${periods.length},1fr)`;
+
+  const makeRow = (label, vals, rowCls = '') =>
+    `<div class="pt-row ${rowCls}" style="grid-template-columns:${gridCols}">
+      <div class="pt-label">${label}</div>
+      ${vals.map(v => `<div class="pt-val ${cls(v)}">${fmtRet(v)}</div>`).join('')}
+    </div>`;
+
+  const perfHTML = `<div class="perf-table">
+    <div class="pt-row pt-head" style="grid-template-columns:${gridCols}">
+      <div></div>
+      ${periods.map(pd => `<div class="pt-col">${pd.label}</div>`).join('')}
+    </div>
+    ${makeRow(bm ? `Benchmark<br><span class="pt-bm-split">${Math.round(bm.SPY*100)}% SPY / ${Math.round(bm.AGG*100)}% AGG</span>` : 'Benchmark', benchVals, 'pt-bm-row')}
+    ${makeRow('Portfolio', portVals)}
+    ${makeRow('Spread', spreadVals, 'pt-spread')}
+  </div>`;
 
   const bucketsHTML = p.buckets.map(b => {
-    const bucketRet = weightedRetBucket(b, dailyRet);
+    const bucketRet = bucketOwnRet(b, dailyRet);
+    const totalWt   = (b.w * b.tickers.length * 100).toFixed(1);
     const rows = b.tickers.map(t => {
       const r = dailyRet(t);
       return `<div class="holding">
@@ -625,10 +679,11 @@ function renderCard(p) {
         <span class="h-ret ${cls(r)}">${fmtRet(r)}</span>
       </div>`;
     }).join('');
+
     return `<div class="bucket-head">
-        <span class="bh-label">${b.label}</span>
-        <span class="bh-wt">${(b.w * b.tickers.length * 100).toFixed(2)}%</span>
+        <span><span class="bh-label">${b.label}</span>&nbsp;&nbsp;&nbsp;<span class="bh-wt">${totalWt}%</span></span>
         <span class="h-spacer"></span>
+        <span class="bh-today">today</span>
         <span class="h-ret ${cls(bucketRet)}">${fmtRet(bucketRet)}</span>
       </div>${rows}`;
   }).join('');
@@ -637,7 +692,7 @@ function renderCard(p) {
     <div class="card-accent" style="background:${p.color}"></div>
     <div class="card-head">
       <div class="card-name">${p.name}</div>
-      <div class="metrics">${metricsHTML}</div>
+      ${perfHTML}
     </div>
     <div class="holdings">${bucketsHTML}</div>
   </div>`;

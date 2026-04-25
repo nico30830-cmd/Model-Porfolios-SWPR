@@ -29,10 +29,18 @@ PORT = int(os.environ.get('PORT', 5000))
 
 # All tickers from the portfolios
 ALL_TICKERS = [
-    'SPGP', 'IWF', 'IWY', 'SCHG', 'SPYG', 'MGK', 'VONG',
+    # Balanced / Aggressive equities
+    'SPGP', 'IWY', 'SCHG', 'SPYG', 'VONG',
+    # Conservative equities
+    'BSTZ', 'BCAT', 'DVY', 'IEMG', 'SCHD', 'VGK', 'NOBL',
+    # Fixed Income (shared)
     'PFFD', 'ANGL', 'VWOB', 'FMHI', 'SRLN', 'ICVT',
+    # Fixed Income (conservative only)
+    'PDO', 'PDI',
+    # BDCs (all portfolios)
     'TSLX', 'MAIN', 'ARCC', 'HTGC', 'CSWC', 'OBDC', 'GBDC', 'BXSL', 'TRIN', 'MSDL',
-    'IEMG', 'VGK',
+    # Benchmarks
+    'SPY', 'AGG',
 ]
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
