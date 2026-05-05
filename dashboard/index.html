@@ -287,9 +287,10 @@
     /* Data row values */
     .pt-val { font-family: var(--mono); font-size: 14px; font-weight: 500; text-align: right; line-height: 1; min-height: 32px; display: flex; align-items: center; justify-content: flex-end; }
     /* Benchmark / spread dividers — border only, no padding, keeps content vertically centred */
-    .pt-bm-label, .pt-bm-cell { border-bottom: 1px solid rgba(255,255,255,0.15); }
+    .pt-bm-label, .pt-bm-cell { border-bottom: 1px solid rgba(255,255,255,0.15); min-height: 44px; }
+    .pt-bm-label { flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; }
     .pt-spread-label, .pt-spread-cell { border-top: 1px solid rgba(255,255,255,0.15); font-size: 12px; }
-    .pt-bm-split { font-size: 13px; text-transform: none; letter-spacing: 0.3px; font-weight: 400; color: var(--muted); white-space: nowrap; }
+    .pt-bm-split { font-size: 11px; text-transform: none; letter-spacing: 0.3px; font-weight: 400; color: var(--muted); white-space: nowrap; }
     .bh-today { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
   </style>
 </head>
@@ -653,7 +654,7 @@ function renderCard(p) {
   const gridCols = `minmax(80px,auto) repeat(${periods.length},minmax(48px,1fr))`;
 
   const bmLabel = bm
-    ? `Benchmark&nbsp;<span class="pt-bm-split">${Object.entries(bm).map(([t, w]) => `${Math.round(w*100)}% ${t}`).join(' / ')}</span>`
+    ? `<span>Benchmark</span><span class="pt-bm-split">${Object.entries(bm).map(([t, w]) => `${Math.round(w*100)}% ${t}`).join(' / ')}</span>`
     : 'Benchmark';
 
   // Flat grid: all cells are direct children so columns align across all rows
