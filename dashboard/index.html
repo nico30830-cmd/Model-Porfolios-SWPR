@@ -352,7 +352,7 @@ const PORTFOLIOS = [
   },
 ];
 
-const ALL_TICKERS = [...new Set([...PORTFOLIOS.flatMap(p => p.buckets.flatMap(b => b.tickers)), 'SPY', 'AGG'])];
+const ALL_TICKERS = [...new Set([...PORTFOLIOS.flatMap(p => p.buckets.flatMap(b => b.tickers)), 'SPY', 'AGG', 'BIZD'])];
 
 // Quarter definitions
 // base    = quarter-start close (previous quarter-end)
@@ -367,9 +367,9 @@ const QUARTER_DEFS = [
 const YTD_BASE = '2025-12-31'; // Dec 31 close is the base for all YTD calculations
 
 const BENCHMARKS = {
-  aggressive:   { SPY: 0.80, AGG: 0.20 },
-  balanced:     { SPY: 0.60, AGG: 0.40 },
-  conservative: { SPY: 0.40, AGG: 0.60 },
+  aggressive:   { SPY: 0.60, AGG: 0.15, BIZD: 0.25 },
+  balanced:     { SPY: 0.45, AGG: 0.30, BIZD: 0.25 },
+  conservative: { SPY: 0.25, AGG: 0.40, BIZD: 0.35 },
 };
 
 function getActiveQuarters() {
@@ -653,7 +653,7 @@ function renderCard(p) {
   const gridCols = `minmax(80px,auto) repeat(${periods.length},minmax(48px,1fr))`;
 
   const bmLabel = bm
-    ? `Benchmark&nbsp;<span class="pt-bm-split">${Math.round(bm.SPY*100)}% SPY / ${Math.round(bm.AGG*100)}% AGG</span>`
+    ? `Benchmark&nbsp;<span class="pt-bm-split">${Object.entries(bm).map(([t, w]) => `${Math.round(w*100)}% ${t}`).join(' / ')}</span>`
     : 'Benchmark';
 
   // Flat grid: all cells are direct children so columns align across all rows

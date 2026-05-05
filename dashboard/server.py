@@ -40,7 +40,7 @@ ALL_TICKERS = [
     # BDCs (all portfolios)
     'TSLX', 'MAIN', 'ARCC', 'HTGC', 'CSWC', 'OBDC', 'GBDC', 'BXSL', 'TRIN', 'MSDL',
     # Benchmarks
-    'SPY', 'AGG',
+    'SPY', 'AGG', 'BIZD',
 ]
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
