@@ -287,10 +287,9 @@
     /* Data row values */
     .pt-val { font-family: var(--mono); font-size: 14px; font-weight: 500; text-align: right; line-height: 1; min-height: 32px; display: flex; align-items: center; justify-content: flex-end; }
     /* Benchmark / spread dividers — border only, no padding, keeps content vertically centred */
-    .pt-bm-label, .pt-bm-cell { border-bottom: 1px solid rgba(255,255,255,0.15); min-height: 44px; }
-    .pt-bm-label { flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; overflow: hidden; }
+    .pt-bm-label, .pt-bm-cell { border-bottom: none; }
     .pt-spread-label, .pt-spread-cell { border-top: 1px solid rgba(255,255,255,0.15); font-size: 12px; }
-    .pt-bm-split { font-size: 11px; text-transform: none; letter-spacing: 0.3px; font-weight: 400; color: var(--muted); white-space: normal; line-height: 1.3; }
+    .pt-bm-weights { grid-column: 1 / -1; font-size: 11px; font-weight: 400; color: var(--muted); letter-spacing: 0.3px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.15); }
     .bh-today { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
   </style>
 </head>
@@ -653,14 +652,15 @@ function renderCard(p) {
 
   const gridCols = `minmax(80px,auto) repeat(${periods.length},minmax(48px,1fr))`;
 
-  const bmLabel = bm
-    ? `<span>Benchmark</span><span class="pt-bm-split">${Object.entries(bm).map(([t, w]) => `${Math.round(w*100)}% ${t}`).join(' / ')}</span>`
-    : 'Benchmark';
+  const bmWeights = bm
+    ? Object.entries(bm).map(([t, w]) => `${Math.round(w*100)}% ${t}`).join(' / ')
+    : null;
 
   // Flat grid: all cells are direct children so columns align across all rows
   const perfHTML = `<div class="perf-table" style="grid-template-columns:${gridCols}">
     <div class="pt-head-spacer"></div>${periods.map(pd => `<div class="pt-col">${pd.label}</div>`).join('')}
-    <div class="pt-label pt-bm-label">${bmLabel}</div>${benchVals.map(v => `<div class="pt-val ${cls(v)} pt-bm-cell">${fmtRet(v)}</div>`).join('')}
+    <div class="pt-label pt-bm-label">Benchmark</div>${benchVals.map(v => `<div class="pt-val ${cls(v)} pt-bm-cell">${fmtRet(v)}</div>`).join('')}
+    ${bmWeights ? `<div class="pt-bm-weights">${bmWeights}</div>` : ''}
     <div class="pt-label">Portfolio</div>${portVals.map(v => `<div class="pt-val ${cls(v)}">${fmtRet(v)}</div>`).join('')}
     <div class="pt-label pt-spread-label">Spread</div>${spreadVals.map(v => `<div class="pt-val ${cls(v)} pt-spread-cell">${fmtRet(v)}</div>`).join('')}
   </div>`;
