@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Local proxy server using yfinance with caching for speed."""
 
-import base64
 import gzip
 import http.server
 import http.cookiejar
 import json
 import os
 import re
+import secrets
 import socketserver
 import sys
 import threading
@@ -28,9 +28,9 @@ except ImportError:
 
 PORT = int(os.environ.get('PORT', 5000))
 
-# Basic auth — only enforced when DASHBOARD_PASSWORD is set
-_AUTH_USER = os.environ.get('DASHBOARD_USER', 'admin')
+# Password protection — only enforced when DASHBOARD_PASSWORD is set
 _AUTH_PASS = os.environ.get('DASHBOARD_PASSWORD', '')
+_SESSIONS  = set()   # valid session tokens (in-memory)
 
 # All tickers from the portfolios
 ALL_TICKERS = [
@@ -152,35 +152,49 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     def _authorized(self):
         if not _AUTH_PASS:
-            return True  # no password set — open access (local dev)
-        header = self.headers.get('Authorization', '')
-        if not header.startswith('Basic '):
-            return False
-        try:
-            decoded = base64.b64decode(header[6:]).decode()
-            user, pw = decoded.split(':', 1)
-            return user == _AUTH_USER and pw == _AUTH_PASS
-        except Exception:
-            return False
-
-    def _demand_auth(self):
-        self.send_response(401)
-        self.send_header('WWW-Authenticate', 'Basic realm="Dashboard"')
-        self.send_header('Content-Type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b'Unauthorized')
+            return True
+        for part in self.headers.get('Cookie', '').split(';'):
+            k, _, v = part.strip().partition('=')
+            if k == 'session' and v in _SESSIONS:
+                return True
+        return False
 
     def do_GET(self):
-        if not self._authorized():
-            self._demand_auth()
-            return
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path in ('/login.html', '/login'):
+            super().do_GET()
+            return
+        if not self._authorized():
+            self.send_response(302)
+            self.send_header('Location', '/login.html')
+            self.end_headers()
+            return
         if parsed.path.startswith('/api/chart/'):
             ticker = parsed.path[len('/api/chart/'):]
             params = dict(urllib.parse.parse_qsl(parsed.query))
             self._proxy(ticker, params)
         else:
             super().do_GET()
+
+    def do_POST(self):
+        if self.path == '/login':
+            length = int(self.headers.get('Content-Length', 0))
+            body = urllib.parse.parse_qs(self.rfile.read(length).decode())
+            pw = body.get('password', [''])[0]
+            if pw == _AUTH_PASS:
+                token = secrets.token_hex(32)
+                _SESSIONS.add(token)
+                self.send_response(302)
+                self.send_header('Set-Cookie', f'session={token}; Path=/; HttpOnly; SameSite=Strict')
+                self.send_header('Location', '/')
+                self.end_headers()
+            else:
+                self.send_response(302)
+                self.send_header('Location', '/login.html?error=1')
+                self.end_headers()
+        else:
+            self.send_response(404)
+            self.end_headers()
 
     def _proxy(self, ticker, params):
         # Return cached data (works for both historical and live requests)
