@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local proxy server using yfinance with caching for speed."""
 
+import base64
 import gzip
 import http.server
 import http.cookiejar
@@ -26,6 +27,10 @@ except ImportError:
     print('yfinance installed.\n')
 
 PORT = int(os.environ.get('PORT', 5000))
+
+# Basic auth — only enforced when DASHBOARD_PASSWORD is set
+_AUTH_USER = os.environ.get('DASHBOARD_USER', 'admin')
+_AUTH_PASS = os.environ.get('DASHBOARD_PASSWORD', '')
 
 # All tickers from the portfolios
 ALL_TICKERS = [
@@ -145,7 +150,30 @@ def _cache_loop():
 
 class _Handler(http.server.SimpleHTTPRequestHandler):
 
+    def _authorized(self):
+        if not _AUTH_PASS:
+            return True  # no password set — open access (local dev)
+        header = self.headers.get('Authorization', '')
+        if not header.startswith('Basic '):
+            return False
+        try:
+            decoded = base64.b64decode(header[6:]).decode()
+            user, pw = decoded.split(':', 1)
+            return user == _AUTH_USER and pw == _AUTH_PASS
+        except Exception:
+            return False
+
+    def _demand_auth(self):
+        self.send_response(401)
+        self.send_header('WWW-Authenticate', 'Basic realm="Dashboard"')
+        self.send_header('Content-Type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Unauthorized')
+
     def do_GET(self):
+        if not self._authorized():
+            self._demand_auth()
+            return
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path.startswith('/api/chart/'):
             ticker = parsed.path[len('/api/chart/'):]
